@@ -118,6 +118,24 @@ export type Database = {
           },
         ]
       }
+      password_fingerprints: {
+        Row: {
+          created_at: string
+          hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -125,6 +143,7 @@ export type Database = {
           id: string
           playwright_server_url: string | null
           updated_at: string
+          username: string | null
         }
         Insert: {
           created_at?: string
@@ -132,6 +151,7 @@ export type Database = {
           id: string
           playwright_server_url?: string | null
           updated_at?: string
+          username?: string | null
         }
         Update: {
           created_at?: string
@@ -139,6 +159,7 @@ export type Database = {
           id?: string
           playwright_server_url?: string | null
           updated_at?: string
+          username?: string | null
         }
         Relationships: []
       }
