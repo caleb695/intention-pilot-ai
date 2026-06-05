@@ -101,13 +101,16 @@ export const TOOLS = [
         properties: {
           action: {
             type: "string",
-            enum: ["goto", "click", "fill", "press", "screenshot", "text", "evaluate", "wait", "close"],
+            enum: ["goto", "click", "fill", "press", "screenshot", "text", "evaluate", "scroll", "hover", "wait", "solve_captcha", "set_lite", "close"],
           },
           selector: { type: "string" },
           url: { type: "string" },
           value: { type: "string" },
           script: { type: "string" },
           timeout_ms: { type: "number" },
+          lite: { type: "boolean", description: "Block images/fonts/media for this action to make navigation 2–5× faster on heavy pages. Turn off (false) before screenshots or when visual layout matters." },
+          sitekey: { type: "string", description: "Captcha sitekey (for solve_captcha)." },
+          captcha_type: { type: "string", enum: ["turnstile", "hcaptcha", "recaptcha"], description: "Captcha type (for solve_captcha)." },
         },
         required: ["action"],
       },
