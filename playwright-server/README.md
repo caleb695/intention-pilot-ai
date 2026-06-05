@@ -4,8 +4,10 @@ A tiny Node service that runs **on your own machine** and gives the chatbot one 
 
 ## What's in the box (and why)
 
-- **[`patchright`](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)** — actively-maintained drop-in replacement for `playwright` that removes the well-known detection leaks (`runtime.enable`, `console.debug` stack trace, headless UA, `navigator.webdriver`, etc.). As of 2026 it beats Cloudflare Turnstile, DataDome, and Kasada at idle far more reliably than the legacy `playwright-stealth` plugin, which is mostly abandoned.
-- **[`ghost-cursor-playwright`](https://github.com/Niek/ghost-cursor-playwright)** — moves the mouse along bezier curves with human-like timing before clicks. Click heatmaps no longer scream "robot."
+- **[`patchright`](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)** — actively-maintained drop-in replacement for `playwright` that removes well-known detection leaks (`runtime.enable`, `console.debug` stack trace, headless UA, `navigator.webdriver`, etc.). Beats Cloudflare Turnstile, DataDome, and Kasada at idle far more reliably than the legacy `playwright-stealth` plugin.
+- **[`ghost-cursor-playwright`](https://github.com/Niek/ghost-cursor-playwright)** — bezier-curve human-like mouse movement before clicks. Click heatmaps no longer scream "robot."
+- **[`2captcha-ts`](https://www.npmjs.com/package/2captcha-ts)** — optional captcha solver for reCAPTCHA v2/v3, hCaptcha, and Cloudflare Turnstile. Only activates when `TWOCAPTCHA_API_KEY` is set in the bridge env.
+- **Resource blocking ("lite mode")** — when the AI calls an action with `lite: true`, the bridge drops images/fonts/media for that action, making navigation 2–5× faster on heavy pages. Auto-disabled for screenshots. Bot detectors don't flag this — real users on slow connections look the same.
 - **Persistent context** at `~/.lovable-agent-chromium` so cookies, localStorage, and site trust survive restarts. Fresh-profile-every-time is itself a strong bot signal.
 - **Real Chrome** via `channel: "chrome"` (not bundled Chromium) — closer fingerprint to a real user.
 - **Realistic UA, locale, and host timezone**, no fixed `1280x720` viewport.
@@ -51,6 +53,16 @@ cloudflared tunnel --url http://localhost:8787
 
 Use the public URL in Settings. **Only do this for yourself** — the bridge has no auth.
 
+## Run
+
+```bash
+# Optional: enable captcha solving
+export TWOCAPTCHA_API_KEY=your_key_here
+
+npm start
+# → http://localhost:8787
+```
+
 ## Supported actions
 
-`goto`, `click`, `fill`, `press`, `text`, `screenshot`, `evaluate`, `scroll`, `hover`, `wait`, `close`, `reset`.
+`goto`, `click`, `fill`, `press`, `text`, `screenshot`, `evaluate`, `scroll`, `hover`, `wait`, `solve_captcha`, `set_lite`, `close`, `reset`.

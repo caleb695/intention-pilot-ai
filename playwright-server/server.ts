@@ -1,4 +1,5 @@
 // Self-hosted stealth Playwright bridge — runs on YOUR machine.
+//
 // Stack:
 //   - patchright: actively-maintained Playwright fork that patches the
 //     well-known automation fingerprints (runtime.enable leak, console.debug
@@ -7,13 +8,19 @@
 //     click heatmaps don't scream "bot".
 //   - persistent context with a real user-data dir so cookies / localStorage /
 //     site trust survive restarts (huge anti-bot signal).
+//   - 2captcha-ts (optional): solves reCAPTCHA v2/v3, hCaptcha, Cloudflare
+//     Turnstile. Only active if TWOCAPTCHA_API_KEY env is set.
+//   - resource blocking: optionally drops images/fonts/media to make
+//     navigation 2–5× faster on heavy pages. Off by default so screenshots
+//     still look real; the AI can flip it per-action via `lite: true`.
 //
 // Single user, one browser, one page at a time. No concurrency.
 
 import express from "express";
 import cors from "cors";
-import { chromium, type BrowserContext, type Page } from "patchright";
+import { chromium, type BrowserContext, type Page, type Route } from "patchright";
 import { createCursor, type GhostCursor } from "ghost-cursor-playwright";
+import { Solver } from "2captcha-ts";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -27,7 +34,9 @@ const USER_DATA_DIR =
   path.join(os.homedir(), ".lovable-agent-chromium");
 fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 
-// Realistic, current desktop Chrome on the host platform.
+const TWOCAPTCHA_KEY = process.env.TWOCAPTCHA_API_KEY;
+const solver = TWOCAPTCHA_KEY ? new Solver(TWOCAPTCHA_KEY) : null;
+
 const PLATFORM = process.platform;
 const UA =
   PLATFORM === "darwin"
@@ -39,21 +48,28 @@ const UA =
 let context: BrowserContext | null = null;
 let page: Page | null = null;
 let cursor: GhostCursor | null = null;
+let liteMode = false; // resource blocking on/off
+
+const HEAVY_TYPES = new Set(["image", "media", "font"]);
+async function routeHandler(route: Route) {
+  if (liteMode && HEAVY_TYPES.has(route.request().resourceType())) {
+    return route.abort();
+  }
+  return route.continue();
+}
 
 async function ensurePage(): Promise<{ p: Page; c: GhostCursor }> {
   if (!context) {
-    // launchPersistentContext + channel:'chrome' is what patchright recommends
-    // for the best stealth posture (real Chrome > bundled Chromium for fp).
     context = await chromium.launchPersistentContext(USER_DATA_DIR, {
       channel: "chrome",
       headless: false,
-      viewport: null, // use real window size, not the 1280x720 tell
+      viewport: null,
       userAgent: UA,
       locale: "en-US",
       timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      // Patchright recommends NOT setting these flags; defaults are tuned.
       args: ["--disable-blink-features=AutomationControlled"],
     });
+    await context.route("**/*", routeHandler);
   }
   if (!page || page.isClosed()) {
     page = context.pages()[0] ?? (await context.newPage());
@@ -62,15 +78,24 @@ async function ensurePage(): Promise<{ p: Page; c: GhostCursor }> {
   return { p: page, c: cursor! };
 }
 
-// Small jittered delay so we don't fire actions at robot intervals.
 const jitter = (min = 80, max = 240) =>
   new Promise((r) => setTimeout(r, min + Math.random() * (max - min)));
 
-app.get("/health", (_req, res) => res.json({ ok: true, stealth: "patchright" }));
+app.get("/health", (_req, res) =>
+  res.json({
+    ok: true,
+    stealth: "patchright",
+    captcha: solver ? "2captcha" : "disabled",
+    lite: liteMode,
+  }),
+);
 
 app.post("/action", async (req, res) => {
-  const { action, selector, url, value, script, timeout_ms } = req.body ?? {};
+  const { action, selector, url, value, script, timeout_ms, lite, sitekey, captcha_type } = req.body ?? {};
   try {
+    // Per-action lite toggle (defaults to current global setting).
+    if (typeof lite === "boolean") liteMode = lite;
+
     const { p, c } = await ensurePage();
     p.setDefaultTimeout(timeout_ms ?? 20000);
 
@@ -81,14 +106,12 @@ app.post("/action", async (req, res) => {
         return res.json({ ok: true, url: p.url(), title: await p.title() });
 
       case "click": {
-        // ghost-cursor moves along a bezier path to the element, then clicks.
         await c.actions.click({ target: selector });
         await jitter();
         return res.json({ ok: true });
       }
 
       case "fill": {
-        // Focus via human-like click, clear, then type with per-keystroke delay.
         await c.actions.click({ target: selector });
         await p.fill(selector, "");
         await p.type(selector, String(value ?? ""), {
@@ -104,6 +127,8 @@ app.post("/action", async (req, res) => {
         return res.json({ ok: true });
 
       case "text": {
+        // In lite mode screenshots are useless anyway; text is what the AI
+        // mostly needs, and it's much cheaper than a full screenshot.
         const text = selector
           ? await p.locator(selector).innerText()
           : await p.innerText("body");
@@ -111,8 +136,17 @@ app.post("/action", async (req, res) => {
       }
 
       case "screenshot": {
-        const buf = await p.screenshot({ fullPage: false });
-        return res.json({ ok: true, screenshot_base64: buf.toString("base64") });
+        // Force-load assets for this one shot regardless of lite mode so the
+        // AI doesn't get a half-rendered page.
+        const wasLite = liteMode;
+        liteMode = false;
+        try {
+          await p.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+          const buf = await p.screenshot({ fullPage: false });
+          return res.json({ ok: true, screenshot_base64: buf.toString("base64") });
+        } finally {
+          liteMode = wasLite;
+        }
       }
 
       case "evaluate": {
@@ -121,9 +155,7 @@ app.post("/action", async (req, res) => {
       }
 
       case "scroll": {
-        // Smooth, human-ish scroll instead of a single jump.
-        const dy = Number(value ?? 600);
-        await p.mouse.wheel(0, dy);
+        await p.mouse.wheel(0, Number(value ?? 600));
         await jitter(200, 500);
         return res.json({ ok: true });
       }
@@ -137,6 +169,49 @@ app.post("/action", async (req, res) => {
         if (selector) await p.waitForSelector(selector);
         else await p.waitForTimeout(timeout_ms ?? 1000);
         return res.json({ ok: true });
+
+      case "solve_captcha": {
+        if (!solver) {
+          return res.status(400).json({
+            ok: false,
+            error: "TWOCAPTCHA_API_KEY not set on the bridge. Captcha solving disabled.",
+          });
+        }
+        const pageUrl = p.url();
+        const type = String(captcha_type ?? "turnstile").toLowerCase();
+        let token: string;
+        if (type === "turnstile") {
+          const r = await solver.cloudflareTurnstile({ pageurl: pageUrl, sitekey });
+          token = r.data;
+          await p.evaluate((t) => {
+            (window as any).turnstile?.execute?.();
+            document.querySelectorAll<HTMLInputElement>(
+              "input[name='cf-turnstile-response']",
+            ).forEach((i) => (i.value = t));
+          }, token);
+        } else if (type === "hcaptcha") {
+          const r = await solver.hcaptcha({ pageurl: pageUrl, sitekey });
+          token = r.data;
+          await p.evaluate((t) => {
+            document.querySelectorAll<HTMLTextAreaElement>(
+              "textarea[name='h-captcha-response'], textarea[name='g-recaptcha-response']",
+            ).forEach((i) => (i.value = t));
+          }, token);
+        } else {
+          const r = await solver.recaptcha({ pageurl: pageUrl, googlekey: sitekey });
+          token = r.data;
+          await p.evaluate((t) => {
+            document.querySelectorAll<HTMLTextAreaElement>(
+              "textarea[name='g-recaptcha-response']",
+            ).forEach((i) => (i.value = t));
+          }, token);
+        }
+        return res.json({ ok: true, token });
+      }
+
+      case "set_lite":
+        liteMode = !!value;
+        return res.json({ ok: true, lite: liteMode });
 
       case "close":
         if (page) {
