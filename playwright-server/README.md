@@ -1,13 +1,31 @@
-# Playwright bridge (self-hosted, single-user)
+# Stealth Playwright bridge (self-hosted, single-user)
 
-A tiny Node service that runs **on your own machine** and exposes one Chromium browser to the chatbot.
+A tiny Node service that runs **on your own machine** and gives the chatbot one Chromium browser that's hard for sites to flag as a bot.
+
+## What's in the box (and why)
+
+- **[`patchright`](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)** — actively-maintained drop-in replacement for `playwright` that removes the well-known detection leaks (`runtime.enable`, `console.debug` stack trace, headless UA, `navigator.webdriver`, etc.). As of 2026 it beats Cloudflare Turnstile, DataDome, and Kasada at idle far more reliably than the legacy `playwright-stealth` plugin, which is mostly abandoned.
+- **[`ghost-cursor-playwright`](https://github.com/Niek/ghost-cursor-playwright)** — moves the mouse along bezier curves with human-like timing before clicks. Click heatmaps no longer scream "robot."
+- **Persistent context** at `~/.lovable-agent-chromium` so cookies, localStorage, and site trust survive restarts. Fresh-profile-every-time is itself a strong bot signal.
+- **Real Chrome** via `channel: "chrome"` (not bundled Chromium) — closer fingerprint to a real user.
+- **Realistic UA, locale, and host timezone**, no fixed `1280x720` viewport.
+- **Per-keystroke and per-action jitter** so action timing isn't machine-perfect.
+
+### Why these specifically (and not the others you listed)
+- `playwright-stealth` / `puppeteer-extra-plugin-stealth` — outdated; many evasions are now detected. Patchright supersedes it.
+- `rebrowser-playwright` — solid alternative; patchright wraps a superset of its patches.
+- `camoufox` — Firefox-based, separate runtime; overkill for a single-user agent.
+- `nodriver` — Python only.
+- `fingerprint-generator` / `fingerprint-injector` — useful if you rotate identities; not needed for a persistent single-user profile (rotating *would* look suspicious here).
+- `playwright-captcha` — requires a paid solver account; out of scope for v1.
 
 ## Setup (one time)
 
 ```bash
 cd playwright-server
 npm install
-npx playwright install chromium
+npx patchright install chromium
+# Recommended: also have real Google Chrome installed on the machine.
 ```
 
 ## Run
@@ -17,27 +35,22 @@ npm start
 # → http://localhost:8787
 ```
 
-Leave it running while you use the app. One browser, one page, no concurrency.
+Leave it running. One browser, one page, no concurrency.
 
 ## Wire it to the app
 
-1. Open the app → **Settings**.
+1. App → **Settings**.
 2. Paste your bridge URL (default `http://localhost:8787`) and save.
-3. The AI's `playwright_action` tool will now drive that browser.
 
-## Exposing it (optional)
-
-If the app is running in the cloud and your bridge is local, expose it with:
+## Exposing it (optional, if the app is in the cloud)
 
 ```bash
-# either
-ngrok http 8787
-# or
 cloudflared tunnel --url http://localhost:8787
+# or: ngrok http 8787
 ```
 
-Then use the public URL in Settings. **Only do this for yourself** — the bridge has no auth.
+Use the public URL in Settings. **Only do this for yourself** — the bridge has no auth.
 
 ## Supported actions
 
-`goto`, `click`, `fill`, `press`, `text`, `screenshot`, `evaluate`, `wait`, `close`.
+`goto`, `click`, `fill`, `press`, `text`, `screenshot`, `evaluate`, `scroll`, `hover`, `wait`, `close`, `reset`.
