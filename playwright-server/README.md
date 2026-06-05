@@ -53,6 +53,16 @@ cloudflared tunnel --url http://localhost:8787
 
 Use the public URL in Settings. **Only do this for yourself** — the bridge has no auth.
 
+## Run
+
+```bash
+# Optional: enable captcha solving
+export TWOCAPTCHA_API_KEY=your_key_here
+
+npm start
+# → http://localhost:8787
+```
+
 ## Supported actions
 
-`goto`, `click`, `fill`, `press`, `text`, `screenshot`, `evaluate`, `scroll`, `hover`, `wait`, `close`, `reset`.
+`goto`, `click`, `fill`, `press`, `text`, `screenshot`, `evaluate`, `scroll`, `hover`, `wait`, `solve_captcha`, `set_lite`, `close`, `reset`.
