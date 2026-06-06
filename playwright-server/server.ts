@@ -172,44 +172,31 @@ app.post("/action", async (req, res) => {
         else await p.waitForTimeout(timeout_ms ?? 1000);
         return res.json({ ok: true });
 
-      case "solve_captcha": {
-        if (!solver) {
-          return res.status(400).json({
-            ok: false,
-            error: "TWOCAPTCHA_API_KEY not set on the bridge. Captcha solving disabled.",
-          });
+      case "wait_for_manual": {
+        // Captcha / 2FA / login wall handoff. Brings the local Chromium
+        // window to the front and waits for the user to clear it.
+        // - If `done_selector` is provided, resolves when that selector appears
+        //   (e.g. the element that exists only AFTER the captcha is solved).
+        // - If `selector` is provided, resolves when that selector disappears
+        //   (e.g. the captcha iframe itself).
+        // - Otherwise just waits `timeout_ms` (default 120s).
+        try { await p.bringToFront(); } catch {}
+        const ms = timeout_ms ?? 120000;
+        try {
+          if (done_selector) {
+            await p.waitForSelector(done_selector, { timeout: ms, state: "visible" });
+          } else if (selector) {
+            await p.waitForSelector(selector, { timeout: ms, state: "detached" });
+          } else {
+            await p.waitForTimeout(ms);
+          }
+          return res.json({ ok: true, solved: true });
+        } catch {
+          return res.json({ ok: false, solved: false, error: "Timed out waiting for manual action." });
         }
-        const pageUrl = p.url();
-        const type = String(captcha_type ?? "turnstile").toLowerCase();
-        let token: string;
-        if (type === "turnstile") {
-          const r = await solver.cloudflareTurnstile({ pageurl: pageUrl, sitekey });
-          token = r.data;
-          await p.evaluate((t) => {
-            (window as any).turnstile?.execute?.();
-            document.querySelectorAll<HTMLInputElement>(
-              "input[name='cf-turnstile-response']",
-            ).forEach((i) => (i.value = t));
-          }, token);
-        } else if (type === "hcaptcha") {
-          const r = await solver.hcaptcha({ pageurl: pageUrl, sitekey });
-          token = r.data;
-          await p.evaluate((t) => {
-            document.querySelectorAll<HTMLTextAreaElement>(
-              "textarea[name='h-captcha-response'], textarea[name='g-recaptcha-response']",
-            ).forEach((i) => (i.value = t));
-          }, token);
-        } else {
-          const r = await solver.recaptcha({ pageurl: pageUrl, googlekey: sitekey });
-          token = r.data;
-          await p.evaluate((t) => {
-            document.querySelectorAll<HTMLTextAreaElement>(
-              "textarea[name='g-recaptcha-response']",
-            ).forEach((i) => (i.value = t));
-          }, token);
-        }
-        return res.json({ ok: true, token });
       }
+
+
 
       case "set_lite":
         liteMode = !!value;
