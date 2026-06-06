@@ -196,6 +196,25 @@ export const deleteConversation = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const updateConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      title: z.string().min(1).max(200).optional(),
+      custom_instructions: z.string().max(8000).nullable().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const patch: any = {};
+    if (data.title !== undefined) patch.title = data.title;
+    if (data.custom_instructions !== undefined) patch.custom_instructions = data.custom_instructions;
+    const { error } = await context.supabase.from("conversations").update(patch).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+
 export const updatePlaywrightUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ url: z.string().url().or(z.literal("")) }).parse(d))
