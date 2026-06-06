@@ -107,8 +107,15 @@ export function ChatPage() {
               onClick={() => setSidebarOpen(false)}
               className="flex-1 truncate">{c.title}</Link>
             <button
-              onClick={async () => { await del({ data: { id: c.id } }); qc.invalidateQueries({ queryKey: ["convs"] }); if (convId === c.id) navigate({ to: "/chat" }); }}
-              className="opacity-0 group-hover:opacity-100 text-xs text-muted-foreground hover:text-destructive ml-2 px-1">✕</button>
+              onClick={async () => {
+                if (!confirm(`Delete "${c.title}"? This can't be undone.`)) return;
+                await del({ data: { id: c.id } });
+                qc.invalidateQueries({ queryKey: ["convs"] });
+                if (convId === c.id) navigate({ to: "/chat" });
+              }}
+              className="opacity-0 group-hover:opacity-100 text-xs text-muted-foreground hover:text-destructive ml-2 px-1"
+              aria-label="Delete chat">✕</button>
+
           </div>
         ))}
       </div>
