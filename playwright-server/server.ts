@@ -8,8 +8,11 @@
 //     click heatmaps don't scream "bot".
 //   - persistent context with a real user-data dir so cookies / localStorage /
 //     site trust survive restarts (huge anti-bot signal).
-//   - 2captcha-ts (optional): solves reCAPTCHA v2/v3, hCaptcha, Cloudflare
-//     Turnstile. Only active if TWOCAPTCHA_API_KEY env is set.
+//   - manual captcha handoff: when the agent hits a captcha it calls
+//     `wait_for_manual` which brings the local Chromium window to the front
+//     and waits up to N seconds for YOU to click through. Since the browser
+//     runs on your own machine and you're the only user, this is faster,
+//     free, and more reliable than any paid solver API.
 //   - resource blocking: optionally drops images/fonts/media to make
 //     navigation 2–5× faster on heavy pages. Off by default so screenshots
 //     still look real; the AI can flip it per-action via `lite: true`.
@@ -20,7 +23,6 @@ import express from "express";
 import cors from "cors";
 import { chromium, type BrowserContext, type Page, type Route } from "patchright";
 import { createCursor, type GhostCursor } from "ghost-cursor-playwright";
-import { Solver } from "2captcha-ts";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -34,8 +36,7 @@ const USER_DATA_DIR =
   path.join(os.homedir(), ".lovable-agent-chromium");
 fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 
-const TWOCAPTCHA_KEY = process.env.TWOCAPTCHA_API_KEY;
-const solver = TWOCAPTCHA_KEY ? new Solver(TWOCAPTCHA_KEY) : null;
+
 
 const PLATFORM = process.platform;
 const UA =
@@ -85,13 +86,14 @@ app.get("/health", (_req, res) =>
   res.json({
     ok: true,
     stealth: "patchright",
-    captcha: solver ? "2captcha" : "disabled",
+    captcha: "manual-handoff",
     lite: liteMode,
   }),
 );
 
 app.post("/action", async (req, res) => {
-  const { action, selector, url, value, script, timeout_ms, lite, sitekey, captcha_type } = req.body ?? {};
+  const { action, selector, url, value, script, timeout_ms, lite, done_selector } = req.body ?? {};
+
   try {
     // Per-action lite toggle (defaults to current global setting).
     if (typeof lite === "boolean") liteMode = lite;
