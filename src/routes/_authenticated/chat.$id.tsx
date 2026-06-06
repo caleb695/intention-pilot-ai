@@ -2,12 +2,13 @@ import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-r
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Menu, Plus, Settings as SettingsIcon, LogOut, X, Send } from "lucide-react";
+import { Menu, Plus, Settings as SettingsIcon, LogOut, X, Send, Sliders, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   sendMessage, listConversations, getConversation,
-  approveTask, setTaskStatus, deleteConversation,
+  approveTask, setTaskStatus, deleteConversation, updateConversation,
 } from "@/lib/ai/chat.functions";
+
 
 export const Route = createFileRoute("/_authenticated/chat/$id")({
   component: ChatPage,
@@ -25,6 +26,8 @@ export function ChatPage() {
   const approve = useServerFn(approveTask);
   const setStatus = useServerFn(setTaskStatus);
   const del = useServerFn(deleteConversation);
+  const updateConv = useServerFn(updateConversation);
+
 
   const convs = useQuery({ queryKey: ["convs"], queryFn: () => list() });
   const conv = useQuery({
@@ -35,8 +38,18 @@ export function ChatPage() {
 
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState("");
+  const [customSaved, setCustomSaved] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync draft when conversation loads / changes
+  useEffect(() => {
+    setCustomDraft(conv.data?.conversation?.custom_instructions ?? "");
+    setCustomSaved(false);
+  }, [conv.data?.conversation?.id]);
+
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: 9e9, behavior: "smooth" }); }, [conv.data]);
 
@@ -94,8 +107,15 @@ export function ChatPage() {
               onClick={() => setSidebarOpen(false)}
               className="flex-1 truncate">{c.title}</Link>
             <button
-              onClick={async () => { await del({ data: { id: c.id } }); qc.invalidateQueries({ queryKey: ["convs"] }); if (convId === c.id) navigate({ to: "/chat" }); }}
-              className="opacity-0 group-hover:opacity-100 text-xs text-muted-foreground hover:text-destructive ml-2 px-1">✕</button>
+              onClick={async () => {
+                if (!confirm(`Delete "${c.title}"? This can't be undone.`)) return;
+                await del({ data: { id: c.id } });
+                qc.invalidateQueries({ queryKey: ["convs"] });
+                if (convId === c.id) navigate({ to: "/chat" });
+              }}
+              className="opacity-0 group-hover:opacity-100 text-xs text-muted-foreground hover:text-destructive ml-2 px-1"
+              aria-label="Delete chat">✕</button>
+
           </div>
         ))}
       </div>
@@ -130,24 +150,84 @@ export function ChatPage() {
       {/* Main */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center justify-between h-12 px-3 border-b border-border shrink-0">
+        <header className="flex items-center justify-between h-12 px-3 border-b border-border shrink-0 gap-2">
           <button
             onClick={() => setSidebarOpen(true)}
             className="md:hidden p-2 -ml-2 text-foreground"
             aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
-          <div className="font-medium text-sm truncate">
-            {conv.data?.messages?.[0]?.content?.slice(0, 40) || "New chat"}
+          <div className="flex-1 font-medium text-sm truncate">
+            {conv.data?.conversation?.title || conv.data?.messages?.[0]?.content?.slice(0, 40) || "New chat"}
           </div>
+          {convId && (
+            <>
+              <button
+                onClick={() => setCustomizeOpen((v) => !v)}
+                className={`p-2 rounded-md hover:bg-accent ${customizeOpen ? "bg-accent" : ""} ${conv.data?.conversation?.custom_instructions ? "text-primary" : "text-foreground"}`}
+                aria-label="Customize this chat"
+                title="Customize this chat">
+                <Sliders className="h-4 w-4" />
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm("Delete this chat? This can't be undone.")) return;
+                  await del({ data: { id: convId } });
+                  qc.invalidateQueries({ queryKey: ["convs"] });
+                  navigate({ to: "/chat" });
+                }}
+                className="p-2 rounded-md hover:bg-accent text-foreground hover:text-destructive"
+                aria-label="Delete chat"
+                title="Delete chat">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
           <button
             onClick={() => navigate({ to: "/chat" })}
             className="md:hidden p-2 -mr-2 text-foreground"
             aria-label="New chat">
             <Plus className="h-5 w-5" />
           </button>
-          <div className="hidden md:block w-5" />
         </header>
+
+        {/* Customize-this-chat panel */}
+        {convId && customizeOpen && (
+          <div className="border-b border-border bg-card/50">
+            <div className="max-w-3xl mx-auto px-4 py-3">
+              <label className="text-xs font-medium text-muted-foreground">
+                Custom instructions for THIS chat only
+              </label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Background info, persona, rules, things the AI should always remember while in this conversation.
+              </p>
+              <textarea
+                value={customDraft}
+                onChange={(e) => { setCustomDraft(e.target.value); setCustomSaved(false); }}
+                rows={4}
+                placeholder="e.g. Always respond in concise bullet points. My company is X. When booking flights, prefer aisle seats."
+                className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y" />
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    await updateConv({ data: { id: convId, custom_instructions: customDraft || null } });
+                    setCustomSaved(true);
+                    qc.invalidateQueries({ queryKey: ["conv", convId] });
+                  }}
+                  className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs">
+                  Save
+                </button>
+                <button
+                  onClick={() => setCustomizeOpen(false)}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs">
+                  Close
+                </button>
+                {customSaved && <span className="text-xs text-muted-foreground">Saved — takes effect on your next message.</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">

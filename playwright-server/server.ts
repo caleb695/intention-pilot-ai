@@ -8,8 +8,11 @@
 //     click heatmaps don't scream "bot".
 //   - persistent context with a real user-data dir so cookies / localStorage /
 //     site trust survive restarts (huge anti-bot signal).
-//   - 2captcha-ts (optional): solves reCAPTCHA v2/v3, hCaptcha, Cloudflare
-//     Turnstile. Only active if TWOCAPTCHA_API_KEY env is set.
+//   - manual captcha handoff: when the agent hits a captcha it calls
+//     `wait_for_manual` which brings the local Chromium window to the front
+//     and waits up to N seconds for YOU to click through. Since the browser
+//     runs on your own machine and you're the only user, this is faster,
+//     free, and more reliable than any paid solver API.
 //   - resource blocking: optionally drops images/fonts/media to make
 //     navigation 2–5× faster on heavy pages. Off by default so screenshots
 //     still look real; the AI can flip it per-action via `lite: true`.
@@ -20,7 +23,6 @@ import express from "express";
 import cors from "cors";
 import { chromium, type BrowserContext, type Page, type Route } from "patchright";
 import { createCursor, type GhostCursor } from "ghost-cursor-playwright";
-import { Solver } from "2captcha-ts";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -34,8 +36,7 @@ const USER_DATA_DIR =
   path.join(os.homedir(), ".lovable-agent-chromium");
 fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 
-const TWOCAPTCHA_KEY = process.env.TWOCAPTCHA_API_KEY;
-const solver = TWOCAPTCHA_KEY ? new Solver(TWOCAPTCHA_KEY) : null;
+
 
 const PLATFORM = process.platform;
 const UA =
@@ -85,13 +86,14 @@ app.get("/health", (_req, res) =>
   res.json({
     ok: true,
     stealth: "patchright",
-    captcha: solver ? "2captcha" : "disabled",
+    captcha: "manual-handoff",
     lite: liteMode,
   }),
 );
 
 app.post("/action", async (req, res) => {
-  const { action, selector, url, value, script, timeout_ms, lite, sitekey, captcha_type } = req.body ?? {};
+  const { action, selector, url, value, script, timeout_ms, lite, done_selector } = req.body ?? {};
+
   try {
     // Per-action lite toggle (defaults to current global setting).
     if (typeof lite === "boolean") liteMode = lite;
@@ -170,44 +172,31 @@ app.post("/action", async (req, res) => {
         else await p.waitForTimeout(timeout_ms ?? 1000);
         return res.json({ ok: true });
 
-      case "solve_captcha": {
-        if (!solver) {
-          return res.status(400).json({
-            ok: false,
-            error: "TWOCAPTCHA_API_KEY not set on the bridge. Captcha solving disabled.",
-          });
+      case "wait_for_manual": {
+        // Captcha / 2FA / login wall handoff. Brings the local Chromium
+        // window to the front and waits for the user to clear it.
+        // - If `done_selector` is provided, resolves when that selector appears
+        //   (e.g. the element that exists only AFTER the captcha is solved).
+        // - If `selector` is provided, resolves when that selector disappears
+        //   (e.g. the captcha iframe itself).
+        // - Otherwise just waits `timeout_ms` (default 120s).
+        try { await p.bringToFront(); } catch {}
+        const ms = timeout_ms ?? 120000;
+        try {
+          if (done_selector) {
+            await p.waitForSelector(done_selector, { timeout: ms, state: "visible" });
+          } else if (selector) {
+            await p.waitForSelector(selector, { timeout: ms, state: "detached" });
+          } else {
+            await p.waitForTimeout(ms);
+          }
+          return res.json({ ok: true, solved: true });
+        } catch {
+          return res.json({ ok: false, solved: false, error: "Timed out waiting for manual action." });
         }
-        const pageUrl = p.url();
-        const type = String(captcha_type ?? "turnstile").toLowerCase();
-        let token: string;
-        if (type === "turnstile") {
-          const r = await solver.cloudflareTurnstile({ pageurl: pageUrl, sitekey });
-          token = r.data;
-          await p.evaluate((t) => {
-            (window as any).turnstile?.execute?.();
-            document.querySelectorAll<HTMLInputElement>(
-              "input[name='cf-turnstile-response']",
-            ).forEach((i) => (i.value = t));
-          }, token);
-        } else if (type === "hcaptcha") {
-          const r = await solver.hcaptcha({ pageurl: pageUrl, sitekey });
-          token = r.data;
-          await p.evaluate((t) => {
-            document.querySelectorAll<HTMLTextAreaElement>(
-              "textarea[name='h-captcha-response'], textarea[name='g-recaptcha-response']",
-            ).forEach((i) => (i.value = t));
-          }, token);
-        } else {
-          const r = await solver.recaptcha({ pageurl: pageUrl, googlekey: sitekey });
-          token = r.data;
-          await p.evaluate((t) => {
-            document.querySelectorAll<HTMLTextAreaElement>(
-              "textarea[name='g-recaptcha-response']",
-            ).forEach((i) => (i.value = t));
-          }, token);
-        }
-        return res.json({ ok: true, token });
       }
+
+
 
       case "set_lite":
         liteMode = !!value;

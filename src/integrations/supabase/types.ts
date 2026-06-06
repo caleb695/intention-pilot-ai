@@ -17,6 +17,7 @@ export type Database = {
       conversations: {
         Row: {
           created_at: string
+          custom_instructions: string | null
           id: string
           status: string
           task_mode: string | null
@@ -26,6 +27,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_instructions?: string | null
           id?: string
           status?: string
           task_mode?: string | null
@@ -35,6 +37,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_instructions?: string | null
           id?: string
           status?: string
           task_mode?: string | null

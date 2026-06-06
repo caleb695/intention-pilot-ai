@@ -28,7 +28,14 @@ export const sendMessage = createServerFn({ method: "POST" })
       convId = c.id;
     }
 
-    // 2. Load user playwright url
+    // 2. Load conversation (for custom_instructions) + user playwright url
+    const { data: convRow } = await supabase
+      .from("conversations")
+      .select("custom_instructions")
+      .eq("id", convId!)
+      .maybeSingle();
+    const customInstructions = convRow?.custom_instructions?.trim() || "";
+
     const { data: prof } = await supabase.from("profiles").select("playwright_server_url").eq("id", userId).maybeSingle();
     const playwrightUrl = prof?.playwright_server_url ?? null;
 
@@ -47,7 +54,11 @@ export const sendMessage = createServerFn({ method: "POST" })
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
 
-    const apiMessages: any[] = [{ role: "system", content: SYSTEM_PROMPT }];
+    const systemContent = customInstructions
+      ? `${SYSTEM_PROMPT}\n\n=== USER'S CUSTOM INSTRUCTIONS FOR THIS CHAT (always follow these in addition to the above) ===\n${customInstructions}`
+      : SYSTEM_PROMPT;
+    const apiMessages: any[] = [{ role: "system", content: systemContent }];
+
     for (const m of history ?? []) {
       const row: any = { role: m.role, content: m.content ?? "" };
       if (m.tool_calls) row.tool_calls = m.tool_calls;
@@ -184,6 +195,25 @@ export const deleteConversation = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export const updateConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      title: z.string().min(1).max(200).optional(),
+      custom_instructions: z.string().max(8000).nullable().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const patch: any = {};
+    if (data.title !== undefined) patch.title = data.title;
+    if (data.custom_instructions !== undefined) patch.custom_instructions = data.custom_instructions;
+    const { error } = await context.supabase.from("conversations").update(patch).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 
 export const updatePlaywrightUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
