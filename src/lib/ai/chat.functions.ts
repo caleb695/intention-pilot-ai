@@ -28,7 +28,14 @@ export const sendMessage = createServerFn({ method: "POST" })
       convId = c.id;
     }
 
-    // 2. Load user playwright url
+    // 2. Load conversation (for custom_instructions) + user playwright url
+    const { data: convRow } = await supabase
+      .from("conversations")
+      .select("custom_instructions")
+      .eq("id", convId!)
+      .maybeSingle();
+    const customInstructions = convRow?.custom_instructions?.trim() || "";
+
     const { data: prof } = await supabase.from("profiles").select("playwright_server_url").eq("id", userId).maybeSingle();
     const playwrightUrl = prof?.playwright_server_url ?? null;
 
@@ -47,7 +54,11 @@ export const sendMessage = createServerFn({ method: "POST" })
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
 
-    const apiMessages: any[] = [{ role: "system", content: SYSTEM_PROMPT }];
+    const systemContent = customInstructions
+      ? `${SYSTEM_PROMPT}\n\n=== USER'S CUSTOM INSTRUCTIONS FOR THIS CHAT (always follow these in addition to the above) ===\n${customInstructions}`
+      : SYSTEM_PROMPT;
+    const apiMessages: any[] = [{ role: "system", content: systemContent }];
+
     for (const m of history ?? []) {
       const row: any = { role: m.role, content: m.content ?? "" };
       if (m.tool_calls) row.tool_calls = m.tool_calls;
