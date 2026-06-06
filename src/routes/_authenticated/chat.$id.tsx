@@ -2,12 +2,13 @@ import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-r
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Menu, Plus, Settings as SettingsIcon, LogOut, X, Send } from "lucide-react";
+import { Menu, Plus, Settings as SettingsIcon, LogOut, X, Send, Sliders, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   sendMessage, listConversations, getConversation,
-  approveTask, setTaskStatus, deleteConversation,
+  approveTask, setTaskStatus, deleteConversation, updateConversation,
 } from "@/lib/ai/chat.functions";
+
 
 export const Route = createFileRoute("/_authenticated/chat/$id")({
   component: ChatPage,
@@ -25,6 +26,8 @@ export function ChatPage() {
   const approve = useServerFn(approveTask);
   const setStatus = useServerFn(setTaskStatus);
   const del = useServerFn(deleteConversation);
+  const updateConv = useServerFn(updateConversation);
+
 
   const convs = useQuery({ queryKey: ["convs"], queryFn: () => list() });
   const conv = useQuery({
@@ -35,8 +38,18 @@ export function ChatPage() {
 
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState("");
+  const [customSaved, setCustomSaved] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync draft when conversation loads / changes
+  useEffect(() => {
+    setCustomDraft(conv.data?.conversation?.custom_instructions ?? "");
+    setCustomSaved(false);
+  }, [conv.data?.conversation?.id]);
+
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: 9e9, behavior: "smooth" }); }, [conv.data]);
 
