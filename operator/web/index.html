@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#0b0b0c" />
+<title>Operator</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <h1>Operator</h1>
+  <span id="status" class="pill">idle</span>
+</header>
+
+<main id="feed" aria-live="polite"></main>
+
+<section id="handoff" hidden>
+  <p id="handoff-msg"></p>
+  <button id="resume">I'm done — resume</button>
+</section>
+
+<form id="composer">
+  <input id="token" type="password" placeholder="token" autocomplete="off" />
+  <textarea id="goal" rows="2" placeholder="Tell Operator what to do…" required></textarea>
+  <div class="row">
+    <button type="button" id="cancel">Cancel</button>
+    <button type="submit" id="go">Go</button>
+  </div>
+</form>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
