@@ -1,0 +1,74 @@
+:root {
+  --bg: #0b0b0c;
+  --fg: #ececec;
+  --muted: #8a8a90;
+  --card: #15151a;
+  --line: #24242b;
+  --accent: #d97757;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --err: #f87171;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  background: var(--bg); color: var(--fg);
+  display: grid; grid-template-rows: auto 1fr auto auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--bg); z-index: 2;
+}
+h1 { margin: 0; font-size: 17px; letter-spacing: .3px; }
+.pill {
+  font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px;
+}
+.pill.running { color: var(--ok); border-color: var(--ok); }
+.pill.handoff { color: var(--warn); border-color: var(--warn); }
+.pill.error { color: var(--err); border-color: var(--err); }
+
+main {
+  overflow-y: auto; padding: 12px 14px 0; display: flex; flex-direction: column; gap: 8px;
+}
+.evt {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; font-size: 14px;
+}
+.evt .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.evt pre {
+  margin: 6px 0 0; white-space: pre-wrap; word-break: break-word;
+  font: 12px/1.4 "SF Mono", ui-monospace, Menlo, monospace; color: #cfcfd5;
+}
+.evt.done { border-color: var(--ok); }
+.evt.error, .evt.failed { border-color: var(--err); }
+.evt.handoff { border-color: var(--warn); }
+
+#handoff {
+  margin: 10px 14px 0; padding: 12px; border: 1px solid var(--warn);
+  border-radius: 12px; background: rgba(251,191,36,.08);
+}
+#handoff p { margin: 0 0 8px; }
+#handoff button { width: 100%; }
+
+#composer {
+  display: grid; gap: 8px; padding: 10px 14px 14px;
+  border-top: 1px solid var(--line); background: var(--bg);
+}
+#composer input, #composer textarea {
+  background: var(--card); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 12px; font: inherit; resize: none;
+}
+#composer textarea:focus, #composer input:focus {
+  outline: none; border-color: var(--accent);
+}
+.row { display: flex; gap: 8px; }
+button {
+  flex: 1; background: var(--accent); color: #1a1a1a; border: 0;
+  border-radius: 12px; padding: 12px 14px; font: 600 15px/1 inherit;
+}
+#cancel { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+button:disabled { opacity: .5; }
