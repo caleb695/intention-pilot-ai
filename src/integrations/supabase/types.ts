@@ -121,6 +121,134 @@ export type Database = {
           },
         ]
       }
+      op_checkpoints: {
+        Row: {
+          state: Json
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          state: Json
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          state?: Json
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "op_checkpoints_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: true
+            referencedRelation: "op_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      op_credentials: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          secret_ciphertext: string
+          site: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          secret_ciphertext: string
+          site: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          secret_ciphertext?: string
+          site?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      op_facts: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          kind: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          kind: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      op_session_state: {
+        Row: {
+          form_values: Json | null
+          id: number
+          scroll: number | null
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          form_values?: Json | null
+          id?: number
+          scroll?: number | null
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          form_values?: Json | null
+          id?: number
+          scroll?: number | null
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
+      op_tasks: {
+        Row: {
+          created_at: string
+          goal: string
+          id: string
+          status: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          goal: string
+          id?: string
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          goal?: string
+          id?: string
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       password_fingerprints: {
         Row: {
           created_at: string
