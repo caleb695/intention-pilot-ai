@@ -198,6 +198,33 @@ export type Database = {
         }
         Relationships: []
       }
+      op_session_endpoint: {
+        Row: {
+          expires_at: string | null
+          id: number
+          run_id: string | null
+          started_at: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          expires_at?: string | null
+          id?: number
+          run_id?: string | null
+          started_at?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          expires_at?: string | null
+          id?: number
+          run_id?: string | null
+          started_at?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       op_session_state: {
         Row: {
           form_values: Json | null
