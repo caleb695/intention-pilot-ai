@@ -17,17 +17,15 @@ class Settings:
     supabase_service_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     supabase_bucket: str = os.getenv("SUPABASE_STORAGE_BUCKET", "operator-profile")
 
-    # Brain
-    mistral_api_key: str = os.getenv("MISTRAL_API_KEY", "")
-    mistral_model: str = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
-    mistral_code_model: str = os.getenv("MISTRAL_CODE_MODEL", "devstral-medium-latest")
-
-    # Eyes
-    moondream_dir: str = os.getenv("MOONDREAM_MODEL_DIR", "./models/moondream2")
-    moondream_quant: str = os.getenv("MOONDREAM_QUANT", "int8")
+    # Brain (Groq Cloud — the only model in the stack)
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # Browser
     camoufox_profile_dir: str = os.getenv("CAMOUFOX_PROFILE_DIR", "./.camoufox-profile")
+
+    # Perception
+    max_elements: int = int(os.getenv("MAX_ELEMENTS", "120"))
 
     # Loop guardrails
     max_steps_per_task: int = int(os.getenv("MAX_STEPS_PER_TASK", "200"))

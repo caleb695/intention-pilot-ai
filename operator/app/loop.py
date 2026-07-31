@@ -1,5 +1,6 @@
 """The perception → plan → act loop.
 
+Perception is the accessibility/DOM tree (text only). Planning is Groq.
 One task at a time. Cooperative cancellation via `Task.cancel`. Streams
 status events out through an asyncio.Queue the API layer subscribes to.
 """
@@ -9,11 +10,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
-from .brain.mistral import plan_next_action, summarise, MistralError
+from .brain.groq import plan_next_action, summarise, BrainError
 from .browser.camoufox import driver
 from .browser.profile import snapshot as snapshot_profile
 from .config import settings
-from .eyes import moondream
 from .memory import supabase as mem
 
 
@@ -59,17 +59,17 @@ class Loop:
         self.transcript.clear()
         self._bg = asyncio.create_task(self._run())
 
-    async def _perceive(self) -> tuple[bytes, str]:
-        shot = await driver.screenshot()
+    async def _perceive(self) -> tuple[list[dict], str]:
+        elements = await driver.snapshot()
         text = await driver.page_text()
-        return shot, text
+        return elements, text
 
     async def _run(self) -> None:
         try:
             await self.emit("started", goal=self.goal, task_id=self.task_id)
             facts = mem.list_facts()
             recent_actions: list[dict] = []
-            perception: dict = {"note": "initial — no perception yet"}
+            perception: dict = {"note": "initial — no page loaded yet"}
 
             for step in range(settings.max_steps_per_task):
                 # Hourly browser restart with profile snapshot.
@@ -79,12 +79,17 @@ class Loop:
                     await driver.close()
                     self._started_at = time.time()
 
-                shot, page_text = await self._perceive()
+                elements, page_text = await self._perceive()
                 action = await plan_next_action(
                     goal=self.goal,
-                    task_state={"step": step, "url": await driver.url()},
+                    task_state={
+                        "step": step,
+                        "url": await driver.url(),
+                        "title": await driver.title(),
+                    },
                     perception=perception,
                     page_text=page_text,
+                    elements=elements,
                     memory_rows=facts,
                     recent_actions=recent_actions,
                 )
@@ -92,61 +97,65 @@ class Loop:
                 recent_actions.append(action)
                 name = action.get("action")
 
-                if name == "goto":
-                    info = await driver.goto(action["url"])
-                    perception = {"goto": info}
-                elif name == "click":
-                    await driver.click_xy(int(action["x"]), int(action["y"]))
-                    perception = {"clicked": action.get("label", "")}
-                elif name == "type":
-                    await driver.type_text(action["text"], submit=bool(action.get("submit")))
-                    perception = {"typed": True}
-                elif name == "key":
-                    await driver.press(action["key"])
-                    perception = {"key": action["key"]}
-                elif name == "scroll":
-                    await driver.scroll(int(action.get("dy", 600)))
-                    perception = {"scrolled": True}
-                elif name == "wait":
-                    await asyncio.sleep(min(int(action.get("ms", 1000)) / 1000, 10))
-                    perception = {"waited": True}
-                elif name == "ask_eyes":
-                    q = action["question"]
-                    answer = await moondream.describe(shot, q)
-                    pts: list[dict] = []
-                    if any(w in q.lower() for w in ("where", "button", "click", "point")):
-                        try:
-                            pts = await moondream.point(shot, q)
-                        except Exception:
-                            pts = []
-                    perception = {"q": q, "a": answer, "points": pts}
-                elif name == "save_memory":
-                    mem.add_fact(action.get("kind", "fact"), action["content"])
-                    facts = mem.list_facts()
-                    perception = {"saved": True}
-                elif name == "handoff":
-                    self.paused_for_user = True
-                    self.handoff_message = action.get("instruction", "Please assist.")
-                    await self.emit("handoff",
-                                    reason=action.get("reason", "other"),
-                                    instruction=self.handoff_message)
-                    self._resume.clear()
-                    await self._resume.wait()
-                    perception = {"handoff_resolved": True}
-                elif name == "done":
-                    summary = action.get("summary") or await summarise(self.goal, self.transcript)
-                    mem.update_task(self.task_id, status="done", summary=summary)
-                    mem.clear_checkpoint(self.task_id)
-                    await snapshot_profile()
-                    await self.emit("done", summary=summary)
-                    return
-                elif name == "fail":
-                    reason = action.get("reason", "unknown")
-                    mem.update_task(self.task_id, status="failed", summary=reason)
-                    await self.emit("failed", reason=reason)
-                    return
-                else:
-                    await self.emit("warn", msg=f"unknown action {name!r}; skipping")
+                try:
+                    if name == "goto":
+                        perception = {"goto": await driver.goto(action["url"])}
+                    elif name == "click":
+                        await driver.click_ref(int(action["ref"]))
+                        perception = {"clicked": action.get("label", action.get("ref"))}
+                    elif name == "type":
+                        await driver.type_ref(int(action["ref"]), action["text"],
+                                              submit=bool(action.get("submit")))
+                        perception = {"typed": True, "ref": action["ref"]}
+                    elif name == "select":
+                        await driver.select_ref(int(action["ref"]), action["value"])
+                        perception = {"selected": action["value"]}
+                    elif name == "key":
+                        await driver.press(action["key"])
+                        perception = {"key": action["key"]}
+                    elif name == "scroll":
+                        await driver.scroll(int(action.get("dy", 600)))
+                        perception = {"scrolled": True}
+                    elif name == "wait":
+                        await asyncio.sleep(min(int(action.get("ms", 1000)) / 1000, 10))
+                        perception = {"waited": True}
+                    elif name == "read":
+                        perception = {"refreshed": True, "note": action.get("note", "")}
+                    elif name == "save_memory":
+                        mem.add_fact(action.get("kind", "fact"), action["content"])
+                        facts = mem.list_facts()
+                        perception = {"saved": True}
+                    elif name == "handoff":
+                        self.paused_for_user = True
+                        self.handoff_message = action.get("instruction", "Please assist.")
+                        await self.emit("handoff",
+                                        reason=action.get("reason", "other"),
+                                        instruction=self.handoff_message)
+                        self._resume.clear()
+                        await self._resume.wait()
+                        perception = {"handoff_resolved": True}
+                    elif name == "done":
+                        summary = action.get("summary") or await summarise(self.goal, self.transcript)
+                        mem.update_task(self.task_id, status="done", summary=summary)
+                        mem.clear_checkpoint(self.task_id)
+                        await snapshot_profile()
+                        await self.emit("done", summary=summary)
+                        return
+                    elif name == "fail":
+                        reason = action.get("reason", "unknown")
+                        mem.update_task(self.task_id, status="failed", summary=reason)
+                        await self.emit("failed", reason=reason)
+                        return
+                    else:
+                        await self.emit("warn", msg=f"unknown action {name!r}; skipping")
+                        perception = {"error": f"unknown action {name!r}"}
+                except (KeyError, ValueError, TypeError) as e:
+                    # Bad ref / missing field — tell the brain instead of dying.
+                    perception = {"error": f"{type(e).__name__}: {e}"}
+                    await self.emit("warn", msg=str(e))
+                except Exception as e:  # noqa: BLE001 — action-level failure
+                    perception = {"error": f"action failed: {type(e).__name__}: {e}"}
+                    await self.emit("warn", msg=f"action failed: {e}")
 
                 mem.write_checkpoint(self.task_id, {
                     "step": step, "url": await driver.url(),
@@ -159,7 +168,7 @@ class Loop:
             mem.update_task(self.task_id, status="failed", summary="cancelled")
             await self.emit("cancelled")
             raise
-        except MistralError as e:
+        except BrainError as e:
             await self.emit("error", error=f"brain: {e}")
             mem.update_task(self.task_id, status="failed", summary=str(e))
         except Exception as e:  # noqa: BLE001
