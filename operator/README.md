@@ -14,7 +14,6 @@ operator/
     brain/
       groq.py            Groq Cloud client (planner + summariser)
       prompts.py         system prompts for planner + summarizer
-    eyes/
 
     browser/
       camoufox.py        Camoufox + Playwright async driver, human timing
