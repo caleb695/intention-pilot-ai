@@ -13,8 +13,8 @@ Supabase so the phone launcher (`/operator` on the web app) can find it.
    - `SUPABASE_URL` — `https://qdxhttpvqhzrkhtvxcyl.supabase.co`
    - `SUPABASE_SERVICE_ROLE_KEY` — from the Lovable Cloud backend panel
    - `SUPABASE_STORAGE_BUCKET` — `operator-profile`
-   - `MISTRAL_API_KEY` — from https://console.mistral.ai/api-keys
-   - Optional: `MISTRAL_MODEL`, `MISTRAL_CODE_MODEL`, `MOONDREAM_QUANT`
+   - `GROQ_API_KEY` — from https://console.groq.com/keys
+   - Optional: `GROQ_MODEL` (defaults to `llama-3.3-70b-versatile`)
 
 ## Start a session
 
@@ -23,7 +23,7 @@ duration in minutes (max 350; runner hard cap is 360).
 
 The workflow will:
 
-1. Install deps, fetch Camoufox's Firefox build, download Moondream weights
+1. Install deps and fetch Camoufox's Firefox build
    (both cached across runs).
 2. Start `uvicorn` on port 7860.
 3. Start a `cloudflared` quick tunnel and grab the `*.trycloudflare.com` URL.
@@ -42,7 +42,7 @@ your `OPERATOR_TOKEN` once in the Operator UI and it's remembered locally.
   run cancels the previous one.
 - **Tunnel URL changes every run.** The launcher page always shows the
   latest.
-- **Cold start ~2–4 min** on a cache hit (Camoufox + Moondream cached),
+- **Cold start ~1–2 min** on a cache hit (Camoufox cached; no model weights),
   ~10–15 min on a cold cache.
 - **Browser profile persists** — cookies/localStorage are snapshotted to the
   `operator-profile` Supabase bucket on shutdown and restored on the next

@@ -12,10 +12,10 @@ operator/
     config.py            env loading, constants
     loop.py              the perception → plan → act loop
     brain/
-      mistral.py         text-only Mistral Large client (planner)
+      groq.py            Groq Cloud client (planner + summariser)
       prompts.py         system prompts for planner + summarizer
     eyes/
-      moondream.py       local Moondream 2 wrapper (int8 on CPU)
+
     browser/
       camoufox.py        Camoufox + Playwright async driver, human timing
       profile.py         persistent profile snapshot/restore via Supabase Storage
@@ -29,7 +29,6 @@ operator/
     app.js
     style.css
   scripts/
-    download_moondream.py   one-time model download (~2 GB int8)
   requirements.txt
   Dockerfile               HF Space container (Python 3.11 + Camoufox deps)
   .env.example
@@ -42,8 +41,7 @@ cd operator
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install firefox     # Camoufox installs its own patched fox
-python scripts/download_moondream.py
-cp .env.example .env                     # fill in SUPABASE_* and MISTRAL_API_KEY
+cp .env.example .env                     # fill in SUPABASE_* and GROQ_API_KEY
 uvicorn app.main:app --reload --port 7860
 ```
 
