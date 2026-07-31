@@ -1,7 +1,10 @@
 # Operator (v2)
 
-Single-user web-automation agent. Python + FastAPI. Designed for Hugging Face
-Spaces free CPU tier (2 vCPU / 16 GB). See `../PLAN.md` for the architecture.
+Single-user web-automation agent. Python + FastAPI. Runs on a free
+`ubuntu-latest` GitHub Actions runner behind a cloudflared quick tunnel.
+
+Brain: **Groq Cloud** (text only). Perception: the page's accessibility/DOM
+tree — no vision model, no local weights.
 
 ## Layout
 
@@ -29,7 +32,7 @@ operator/
     style.css
   scripts/
   requirements.txt
-  Dockerfile               HF Space container (Python 3.11 + Camoufox deps)
+  Dockerfile               optional container (Python 3.11 + Camoufox deps)
   .env.example
 ```
 
@@ -46,10 +49,9 @@ uvicorn app.main:app --reload --port 7860
 
 Open http://localhost:7860.
 
-## HF Spaces deploy
+## Deploy
 
-See `../PLAN.md` → Hosting. Step-by-step setup walkthrough is in
-`docs/HF_SETUP.md` (TBD — written when we get to deploy).
+See `docs/GITHUB_ACTIONS.md`.
 
 ## v1 archive
 
